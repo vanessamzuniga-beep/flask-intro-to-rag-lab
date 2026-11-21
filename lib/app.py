@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from flask import Flask, jsonify, request
@@ -16,20 +17,39 @@ def create_app():
 
     @app.post("/api/ask")
     def ask_question():
-        """Accept a query and return a source-backed generated answer.
+        data = request.get_json(silent=True) or {}
+        query = data.get("query")
 
-        TODO:
-        1. Read JSON request data safely.
-        2. Validate that `query` is a non-empty string.
-        3. Retrieve relevant context from COMPANY_DOCUMENTS.
-        4. If no context is found, return a safe fallback with an empty sources list.
-        5. Build a structured prompt from the selected context.
-        6. Call generate_response(prompt).
-        7. Return query, answer, and sources as JSON.
-        8. If generate_response raises RuntimeError, return a 503 service error.
-        """
-        # TODO: Replace this placeholder response with your implementation.
-        return jsonify({"message": "TODO: implement /api/ask"}), 501
+        if not isinstance(query, str) or not query.strip():
+            return jsonify({
+                "error": "A non-empty query is required."
+            }), 400
+
+        context = retrieve_context(query, COMPANY_DOCUMENTS)
+
+        if not context:
+            return jsonify({
+                "query": query,
+                "answer": (
+                    "The approved company documents do not contain enough information to answer that question."
+                ),
+                "sources": [],
+            }), 200
+
+        prompt = build_prompt(query, context)
+
+        try:
+            answer = generate_response(prompt)
+        except RuntimeError:
+            return jsonify({
+                "error": "The AI service is currently unavailable."
+            }), 503
+
+        return jsonify({
+            "query": query,
+            "answer": answer,
+            "sources": [source_metadata(match) for match in context],
+        }), 200
 
     return app
 
